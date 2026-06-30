@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useEffect, useState } from 'react';
 import { createRoot } from 'react-dom/client';
 import {
   ArrowRight,
@@ -20,6 +20,7 @@ import {
   UsersRound,
 } from 'lucide-react';
 import './styles.css';
+import { askPublicBot, config, publicUrl, track } from './runtime';
 
 type Message = { from: 'user' | 'bot'; text: string };
 
@@ -63,21 +64,21 @@ const publicLinks = [
     tag: 'CONFIRMACIÓN',
     copy: 'Vista pública para que el cliente confirme asistencia sin entrar al backoffice.',
     detail: 'Corte + barba · Sofía Rivas · Sede Palermo · 09:00',
-    href: 'https://backoffice.diceprojects.com/public/servicepub/appointments/servicepub-demo-confirmar-corte-barba',
+    href: publicUrl(config.confirmPath),
   },
   {
     title: 'Reprogramar reserva',
     tag: 'REPROGRAMACIÓN',
     copy: 'Experiencia pública para elegir otro horario disponible y conservar trazabilidad.',
     detail: 'Coloración · Camila Torres · Próximos slots disponibles',
-    href: 'https://backoffice.diceprojects.com/public/servicepub/appointments/servicepub-demo-reprogramar-coloracion',
+    href: publicUrl(config.reschedulePath),
   },
   {
     title: 'Lista de espera',
     tag: 'WAITLIST',
     copy: 'Link para tomar un hueco liberado, confirmar condiciones y recuperar ocupación.',
     detail: 'Spa facial · Lista de espera · Prioridad por scoring',
-    href: 'https://backoffice.diceprojects.com/public/servicepub/waitlist/servicepub-demo-spa-palermo',
+    href: publicUrl(config.waitlistPath),
   },
 ] as const;
 
@@ -119,7 +120,13 @@ function Copilot() {
   const prompts = ['¿Qué clientes hace 45 días no vienen?', '¿Cómo bajo el no-show?', '¿Qué profesional tiene más demanda?'];
   const send = (text: string) => {
     if (!text.trim()) return;
+    track('BOT_QUESTION', { actionCode: 'servicepub_public_copilot_question', actionLabel: text.slice(0, 120), category: 'COPILOT' });
     setMessages((current) => [...current, { from: 'user', text }, { from: 'bot', text: answer(text) }]);
+    void askPublicBot(text).then((remoteAnswer) => {
+      if (remoteAnswer) {
+        setMessages((current) => [...current.slice(0, -1), { from: 'bot', text: remoteAnswer }]);
+      }
+    });
     setInput('');
     setOpen(true);
   };
@@ -139,18 +146,22 @@ function Copilot() {
 }
 
 function App() {
+  useEffect(() => {
+    track('VIEW', { actionCode: 'servicepub_page_home', actionLabel: 'ServicePub landing', category: 'NAVIGATION' });
+  }, []);
+
   return (
     <main>
       <nav className="nav">
         <a className="brand" href="#inicio"><span className="brand-mark" /><span><strong>ServicePub</strong><small>Gestión por turnos</small></span></a>
-        <div><a href="#modulos">Módulos</a><a href="#core">Core</a><a href="#roi">ROI</a><a href="#links">Links</a><a href="#demo">Demo</a></div>
+        <div><a data-mkt="servicepub_nav_modules" href="#modulos">Módulos</a><a data-mkt="servicepub_nav_core" href="#core">Core</a><a data-mkt="servicepub_nav_roi" href="#roi">ROI</a><a data-mkt="servicepub_nav_links" href="#links">Links</a><a data-mkt="servicepub_nav_demo" href="#demo">Demo</a></div>
       </nav>
       <section id="inicio" className="hero">
         <div>
           <p className="eyebrow">SERVICIOS · TURNOS · CLIENTES · FIDELIZACIÓN</p>
           <h1>El BackOffice para empresas de servicios que trabajan por turnos.</h1>
           <p>Administrá clientes, reservas, profesionales, servicios, fidelización y marketing desde una única plataforma.</p>
-          <div className="actions"><a className="button primary" href="#demo">Ver demo <ArrowRight size={18} /></a><a className="button secondary" href="#modulos">Ver módulos</a></div>
+          <div className="actions"><a className="button primary" href="#demo" onClick={() => track('CLICK', { actionCode: 'servicepub_cta_demo', actionLabel: 'Ver demo', category: 'CTA' })}>Ver demo <ArrowRight size={18} /></a><a className="button secondary" href="#modulos" onClick={() => track('CLICK', { actionCode: 'servicepub_cta_modules', actionLabel: 'Ver módulos', category: 'CTA' })}>Ver módulos</a></div>
         </div>
         <div className="agenda-board">
           <header><CalendarDays /><strong>Agenda de hoy</strong><span>87% ocupación</span></header>
@@ -211,7 +222,7 @@ function App() {
         </div>
         <div className="link-grid">
           {publicLinks.map((item) => (
-            <a className="public-card" href={item.href} target="_blank" rel="noreferrer" key={item.title}>
+            <a className="public-card" href={item.href} target="_blank" rel="noreferrer" key={item.title} onClick={() => track('APPOINTMENT_VIEW', { actionCode: `servicepub_public_link_${item.tag.toLowerCase()}`, actionLabel: item.title, category: 'PUBLIC_LINK', entityType: 'APPOINTMENT', metadata: { href: item.href, detail: item.detail } })}>
               <span className="link-top"><small>{item.tag}</small><ExternalLink size={18} /></span>
               <strong>{item.title}</strong>
               <p>{item.copy}</p>
